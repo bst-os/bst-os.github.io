@@ -45,7 +45,8 @@ Deno.serve(async (req) => {
       if (!okPin(pin)) return fail("PIN harus 6 angka.");
       const { data: u, error } = await admin.auth.admin.createUser({ email: email(username), password: pw(pin), email_confirm: true, user_metadata: { full_name: name } });
       if (error) return fail(/registered|exists/i.test(error.message) ? "Username sudah dipakai." : error.message);
-      await setProfile(u.user.id, { full_name: name || "Owner", username, staff_role: "owner", role: "owner", active: true });
+      const { data: firstLoc } = await admin.from("locations").select("id").eq("kind", "outlet").order("sort").limit(1).maybeSingle();
+      await setProfile(u.user.id, { full_name: name || "Owner", username, staff_role: "owner", role: "owner", active: true, location_id: firstLoc?.id ?? null });
       return json({ ok: true });
     }
 
@@ -63,6 +64,7 @@ Deno.serve(async (req) => {
       const active = body.active !== false;
       const username = String(body.username || "").trim().toLowerCase();
       const pin = String(body.pin || "");
+      const loc = body.location_id ? Number(body.location_id) : null;
       if (!name) return fail("Nama wajib diisi.");
       if (!ROLES.includes(role)) return fail("Peran tidak dikenal.");
       if (!okUser(username)) return fail("Username 3–24 karakter: huruf kecil, angka, titik, strip.");
@@ -90,13 +92,13 @@ Deno.serve(async (req) => {
         if (pin) upd.password = pw(pin);
         const { error } = await admin.auth.admin.updateUserById(id, upd);
         if (error) return fail(error.message);
-        await setProfile(id, { full_name: name, username, staff_role: role, role: legacyRole(role), active, email: email(username) });
+        await setProfile(id, { full_name: name, username, staff_role: role, role: legacyRole(role), active, email: email(username), location_id: loc });
         return json({ ok: true, id });
       }
       if (!pin) return fail("Isi PIN 6 angka untuk akun baru.");
       const { data: u, error } = await admin.auth.admin.createUser({ email: email(username), password: pw(pin), email_confirm: true, user_metadata: { full_name: name }, ban_duration: active ? "none" : "876000h" });
       if (error) return fail(/registered|exists/i.test(error.message) ? "Username sudah dipakai." : error.message);
-      await setProfile(u.user.id, { full_name: name, username, staff_role: role, role: legacyRole(role), active });
+      await setProfile(u.user.id, { full_name: name, username, staff_role: role, role: legacyRole(role), active, location_id: loc });
       return json({ ok: true, id: u.user.id });
     }
     return fail("Aksi tidak dikenal.");

@@ -69,6 +69,7 @@ label{display:grid;gap:.3rem;font-size:.78rem;color:var(--muted);font-weight:600
 .brand .tile svg{width:30px;height:auto;color:var(--on-brand)}
 .brand div{display:grid;line-height:1.25;min-width:0}
 .brand b{font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.locbtn{display:inline-flex;align-items:center;gap:.25rem;border:0;background:var(--brand-soft);color:var(--brand);font-weight:700;font-size:.74rem;border-radius:6px;padding:.1rem .45rem;cursor:pointer;justify-self:start}
 .status{display:inline-flex;align-items:center;gap:.35rem;font-size:.74rem;color:var(--ok);font-weight:600}
 .status::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
 .navlist{overflow:auto;display:grid;align-content:start;gap:1rem}
@@ -348,6 +349,7 @@ const IC = {
   bag: '<path d="M5 8h14l-1 12H6z"/><path d="M9 8a3 3 0 0 1 6 0"/>',
   chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   spark: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+  truck: '<path d="M3 6h11v10H3z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>'
 };
 const VIEWS = [
@@ -358,6 +360,7 @@ const VIEWS = [
   {g: "Harian", k: "absensi", t: "Absensi", i: "cam", roles: "*"},
   {g: "Gudang", k: "stok", t: "Stok bahan", i: "box", roles: "*"},
   {g: "Gudang", k: "order", t: "Order bahan", i: "cart", roles: "*"},
+  {g: "Gudang", k: "kirim", t: "Kirim stok", i: "truck", roles: "*"},
   {g: "Gudang", k: "pembelian", t: "Pembelian", i: "bag", roles: ["owner", "manager", "dapur"]},
   {g: "Owner", k: "laporan", t: "Keuangan", i: "chart", roles: ["owner", "manager"]},
   {g: "Owner", k: "analitik", t: "Analitik", i: "spark", roles: ["owner", "manager"]},
@@ -373,19 +376,27 @@ function userSheet() {
     <div class="row" style="justify-content:flex-end"><button class="btn fit" id="uNo">Tutup</button><button class="btn pri fit" id="uOut">Keluar</button></div>`);
   m.querySelector("#uNo").onclick = closeModal; m.querySelector("#uOut").onclick = async () => { await SB.auth.signOut(); location.reload(); };
 }
+function locSheet() {
+  const m = modal(`<div class="head"><h3>Pilih lokasi</h3><button class="btn sm fit" id="lNo">Tutup</button></div>
+    <div class="tasks">${S.locs.filter(l => l.active).map(l => `<button class="task${l.id === S.loc ? " done" : ""}" data-lp="${l.id}"><span class="ck"></span><div><b>${esc(l.name)}</b><small>${l.kind === "gudang" ? "Gudang: belanja, stok, kirim ke outlet" : "Outlet: kasir, prep, closing, absensi"}</small></div></button>`).join("")}</div>`);
+  m.querySelector("#lNo").onclick = closeModal;
+  m.querySelectorAll("[data-lp]").forEach(b => b.onclick = () => { closeModal(); switchLoc(+b.dataset.lp); });
+}
 function moreSheet() {
   const vs = VIEWS.filter(allowed);
   const m = modal(`<div class="head"><h3>Semua menu</h3><button class="btn sm fit" id="mNo">Tutup</button></div>
     <div class="sheet">${vs.map(v => `<button data-sg="${v.k}" ${v.k === S.view ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24">${IC[v.i]}</svg>${v.t}</button>`).join("")}</div>
+    ${isAdmin() ? `<button class="me" data-locpick2><span class="av" style="background:var(--brand);color:var(--on-brand)">${esc((curLoc()?.code || "").slice(0, 2))}</span><div><b>${esc(curLoc()?.name || "")}</b><small>Ganti lokasi / outlet</small></div></button>` : ""}
     <button class="me" id="mMe"><span class="av">${esc(initials())}</span><div><b>${esc(S.me.full_name)}</b><small>${esc(ROLE_LABEL[S.role])} · ketuk untuk keluar</small></div></button>`);
   m.querySelector("#mNo").onclick = closeModal;
   m.querySelectorAll("[data-sg]").forEach(b => b.onclick = () => { closeModal(); go(b.dataset.sg); });
   m.querySelector("#mMe").onclick = userSheet;
+  m.querySelector("[data-locpick2]")?.addEventListener("click", locSheet);
 }
 function renderShell() {
   const vs = VIEWS.filter(allowed), groups = [...new Set(vs.map(v => v.g))];
   const bot = (BOTTOM[S.role] || BOTTOM.kasir).map(k => VIEWS.find(v => v.k === k)).filter(v => v && allowed(v));
-  const brand = `<div class="brand"><span class="tile">${logoSvg(LOGO_BST)}</span><div><b class="outletName">${esc(S.settings.outlet?.name || "Bubur Simpang Tiga")}</b><span class="status">Buka hari ini</span></div></div>`;
+  const brand = `<div class="brand"><span class="tile">${logoSvg(LOGO_BST)}</span><div><b class="outletName">${esc(S.settings.outlet?.name || "Bubur Simpang Tiga")}</b>${isAdmin() ? `<button class="locbtn" data-locpick>${esc(curLoc()?.name || "-")} <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg></button>` : `<span class="status">${esc(curLoc()?.name || "-")}</span>`}</div></div>`;
   $("#root").innerHTML = `<div class="app">
     <aside class="side">${brand}
       <nav class="navlist" aria-label="Menu">${groups.map(g => `<div class="grp"><div class="grp-t">${g}</div>${vs.filter(v => v.g === g).map(navBtn).join("")}</div>`).join("")}</nav>
@@ -407,6 +418,7 @@ function renderShell() {
   </div>`;
   $$("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go));
   $("#refresh").onclick = async () => { await loadMaster(); go(S.view); refreshBadges(); };
+  $$("[data-locpick]").forEach(b => b.onclick = locSheet);
   $("#meBtn").onclick = userSheet; $("#topUser").onclick = userSheet; $("#moreBtn").onclick = moreSheet;
   const tick = () => { const c = $("#clock"); if (c) c.textContent = new Date().toLocaleString("id-ID", {weekday: "long", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: TZ}); };
   tick(); clearInterval(S.clockT); S.clockT = setInterval(tick, 30000);
@@ -423,12 +435,33 @@ async function go(k) {
 
 /* ---------- data ---------- */
 async function loadMaster() {
-  const [m, i, st] = await Promise.all([
+  const [m, i, st, lv] = await Promise.all([
     q(SB.from("menu_items").select("*").order("sort").order("id")),
     q(SB.from("ingredients").select("*").order("name")),
-    q(SB.from("settings").select("*"))
+    q(SB.from("settings").select("*")),
+    q(SB.from("stock_levels").select("*").eq("location_id", S.loc))
   ]);
-  S.menu = m; S.ing = i; S.settings = Object.fromEntries(st.map(x => [x.key, x.value]));
+  S.menu = m; S.settings = Object.fromEntries(st.map(x => [x.key, x.value]));
+  // stock, min and par come from the selected location
+  S.ing = i.map(x => { const l = lv.find(y => y.ingredient_id === x.id) || {}; return {...x, stock_qty: Number(l.qty || 0), min_stock: Number(l.min_stock || 0), par_stock: Number(l.par_stock || 0)}; });
+}
+async function loadLocs() { S.locs = await q(SB.from("locations").select("*").order("sort")); }
+const locName = id => S.locs.find(l => l.id === id)?.name || "—";
+const curLoc = () => S.locs.find(l => l.id === S.loc);
+const isOutlet = () => curLoc()?.kind === "outlet";
+function setLoc(id) { S.loc = +id; lsSet("bst_loc", String(S.loc)); }
+function needOutlet(el) {
+  if (isOutlet()) return false;
+  const outs = S.locs.filter(l => l.kind === "outlet" && l.active);
+  el.innerHTML = `<div class="empty">${logoSvg(LOGO_EMBLEM, "emb")}<b>Halaman ini untuk outlet</b><span>Sekarang Anda di ${esc(curLoc()?.name || "-")}. Pilih outlet untuk membuka kasir, prep, closing, atau absensi.</span>
+    ${isAdmin() ? `<div class="row" style="justify-content:center">${outs.map(l => `<button class="btn pri fit" data-pickloc="${l.id}">${esc(l.name)}</button>`).join("")}</div>` : ""}</div>`;
+  el.querySelectorAll("[data-pickloc]").forEach(b => b.onclick = () => switchLoc(+b.dataset.pickloc));
+  return true;
+}
+async function switchLoc(id) {
+  setLoc(id); await loadMaster(); renderShell();
+  if (isOutlet()) try { await rpc("day_open", {p_date: today(), p_loc: S.loc}); } catch (e) {}
+  await go(S.view); refreshBadges(); toast("Lokasi: " + locName(S.loc));
 }
 async function loadStaff() { try { S.staff = await rpc("staff_names"); } catch (e) { S.staff = []; } }
 const staffName = id => S.staff.find(s => s.id === id)?.full_name || "—";
@@ -437,8 +470,8 @@ const baseItem = () => S.menu.find(m => m.kind === "base" && m.active);
 const sellable = () => S.menu.filter(m => m.kind !== "base" && m.active && m.category !== "Arsip");
 async function dayData(date) {
   const [prep, sales] = await Promise.all([
-    q(SB.from("daily_prep").select("*").eq("prep_date", date)),
-    q(SB.from("sales").select("*, sale_items(*)").eq("sale_date", date).order("created_at", {ascending: false}))
+    q(SB.from("prep_log").select("*").eq("prep_date", date).eq("location_id", S.loc)),
+    q(SB.from("sales").select("*, sale_items(*)").eq("sale_date", date).eq("location_id", S.loc).order("created_at", {ascending: false}))
   ]);
   const sold = {};
   let bowls = 0;
@@ -504,8 +537,11 @@ async function start(session) {
   const me = await q(SB.from("profiles").select("*").eq("id", session.user.id).maybeSingle());
   if (!me || !me.active) { await SB.auth.signOut(); toast("Akun belum aktif. Hubungi Owner.", true); return renderAuth(); }
   S.me = me; S.role = me.staff_role;
+  await loadLocs();
+  const savedLoc = +lsGet("bst_loc");
+  setLoc(isAdmin() && S.locs.some(l => l.id === savedLoc) ? savedLoc : (me.location_id || S.locs.find(l => l.kind === "outlet")?.id || S.locs[0]?.id));
   await Promise.all([loadMaster(), loadStaff()]);
-  try { await rpc("open_day", {p_date: today()}); } catch (e) {}
+  if (isOutlet()) try { await rpc("day_open", {p_date: today(), p_loc: S.loc}); } catch (e) {}
   renderShell();
   const saved = lsGet("bst_view");
   await go(saved && VIEWS.some(v => v.k === saved && allowed(v)) ? saved : (S.role === "kasir" ? "kasir" : "beranda"));
@@ -514,21 +550,51 @@ async function start(session) {
 async function refreshBadges() {
   try {
     const low = S.ing.filter(i => i.active && Number(i.stock_qty) <= Number(i.min_stock) && Number(i.min_stock) > 0).length;
-    const ords = await q(SB.from("orders").select("id", {count: "exact", head: false}).in("status", ["draft", "dipesan"]));
+    const ords = await q(SB.from("orders").select("id").eq("location_id", S.loc).in("status", ["draft", "dipesan"]));
+    const trs = await q(SB.from("transfers").select("id").eq("to_location", S.loc).eq("status", "dikirim"));
     const set = (k, n) => $$(`[data-cnt="${k}"]`).forEach(e => { e.hidden = !n; e.textContent = n; });
+    set("kirim", trs.length);
     set("stok", low); set("order", ords.length);
   } catch (e) {}
 }
 
 /* ================= BERANDA ================= */
+async function vBerandaGudang(el) {
+  const [orders, trOut, trIn] = await Promise.all([
+    q(SB.from("orders").select("*").eq("location_id", S.loc).in("status", ["draft", "dipesan"]).order("created_at", {ascending: false})),
+    q(SB.from("transfers").select("*").eq("from_location", S.loc).eq("status", "dikirim").order("created_at", {ascending: false})),
+    q(SB.from("transfers").select("*").eq("to_location", S.loc).eq("status", "dikirim"))
+  ]);
+  const low = S.ing.filter(i => i.active && Number(i.min_stock) > 0 && Number(i.stock_qty) <= Number(i.min_stock));
+  const value = S.ing.reduce((a, i) => a + Math.max(0, Number(i.stock_qty)) * Number(i.cost_per_unit), 0);
+  el.innerHTML = `<div class="hello"><div class="stack" style="gap:.4rem"><div class="eyebrow">${esc(fLong(today()))}</div><h2>${esc(curLoc()?.name || "Gudang")}</h2>
+      <p>Belanja bahan masuk ke sini, lalu dikirim ke outlet lewat <b>Kirim stok</b>.</p></div>${logoSvg(LOGO_EMBLEM)}</div>
+    <div class="kpis">
+      <div class="kpi lead"><span class="eyebrow">Nilai stok gudang</span><b>${rp(value)}</b><span class="small">${S.ing.filter(i => i.active).length} bahan</span></div>
+      <div class="kpi"><span class="eyebrow">Stok menipis</span><b>${low.length}</b><span class="small">${low.length ? "perlu dipesan" : "aman"}</span></div>
+      <div class="kpi"><span class="eyebrow">Order berjalan</span><b>${orders.length}</b><span class="small">${orders.filter(o => o.status === "draft").length} menunggu disetujui</span></div>
+      <div class="kpi"><span class="eyebrow">Kiriman di jalan</span><b>${trOut.length}</b><span class="small">belum diterima outlet</span></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h3>Yang perlu dikerjakan</h3><div class="tasks">
+        <button class="task${low.length ? "" : " done"}" data-g="order"><span class="ck"></span><div><b>Order bahan yang menipis</b><small>${low.length ? low.slice(0, 4).map(i => esc(i.name)).join(", ") : "Semua stok di atas minimum"}</small></div><span class="go">›</span></button>
+        <button class="task" data-g="kirim"><span class="ck"></span><div><b>Kirim stok ke outlet</b><small>Pakai tombol "Isi sesuai kebutuhan tujuan"</small></div><span class="go">›</span></button>
+        ${trIn.length ? `<button class="task" data-g="kirim"><span class="ck"></span><div><b>Terima ${trIn.length} kiriman masuk</b><small>Cocokkan jumlahnya</small></div><span class="go">›</span></button>` : ""}
+        <button class="task" data-g="absensi"><span class="ck"></span><div><b>Absensi</b><small>Selfie masuk dan pulang</small></div><span class="go">›</span></button>
+      </div></div>
+      <div class="panel"><h3>Kiriman belum diterima</h3>${trOut.length ? `<div class="tbl"><table><tbody>${trOut.map(t => `<tr><td>#${t.id} → ${esc(locName(t.to_location))}</td><td class="small">${fDT(t.created_at)}</td><td class="num">${(t.items || []).length} bahan</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">Tidak ada kiriman yang tertunda.</p>`}</div>
+    </div>`;
+  $$("[data-g]").forEach(b => b.onclick = () => go(b.dataset.g));
+}
 async function vBeranda(el) {
+  if (!isOutlet()) return vBerandaGudang(el);
   const d = today();
   const [day, att, cl, cash, orders] = await Promise.all([
     dayData(d),
     q(SB.from("attendance").select("*").eq("work_date", d).eq("user_id", S.me.id).order("at")),
-    q(SB.from("checklist_runs").select("*").eq("work_date", d)),
-    q(SB.from("cash_closings").select("*").eq("work_date", d).maybeSingle()),
-    q(SB.from("orders").select("*").in("status", ["draft", "dipesan"]).order("created_at", {ascending: false}))
+    q(SB.from("checklist_log").select("*").eq("work_date", d).eq("location_id", S.loc)),
+    q(SB.from("kas_closing").select("*").eq("work_date", d).eq("location_id", S.loc).maybeSingle()),
+    q(SB.from("orders").select("*").eq("location_id", S.loc).in("status", ["draft", "dipesan"]).order("created_at", {ascending: false}))
   ]);
   const lists = S.settings.checklists || {opening: [], closing: []};
   const run = k => cl.find(x => x.kind === k);
@@ -585,6 +651,7 @@ const mascot = vb => { const [, , w, h] = vb.split(" ").map(Number); return `<sv
 const menuImg = (m, i) => m.image_url ? `<img src="${esc(m.image_url)}" alt="" loading="lazy">` : mascot(MASCOTS[Math.max(0, i ?? S.menu.findIndex(x => x.id === m.id)) % MASCOTS.length]);
 const IC_TRASH = '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
 async function vKasir(el) {
+  if (needOutlet(el)) return;
   S.otype ||= "dine_in";
   el.innerHTML = `
   <div class="pos">
@@ -696,7 +763,7 @@ async function doPay() {
     const items = Object.entries(S.cart).map(([id, n]) => ({menu_item_id: +id, qty: n}));
     const lines = items.map(i => { const m = S.menu.find(x => x.id === i.menu_item_id); return (`${i.qty} x ${m.name}`).slice(0, 22).padEnd(22) + rp(i.qty * m.price).padStart(12); }).join("\n");
     const method = S.pay, otype = S.otype, note = S.ui.onote || "";
-    const r = await rpc("record_sale_v2", {p_items: items, p_payment: method, p_paid: paid, p_order_type: otype, p_note: note || null});
+    const r = await rpc("pos_sale", {p_loc: S.loc, p_items: items, p_payment: method, p_paid: paid, p_order_type: otype, p_note: note || null});
     S.cart = {}; S.ui.onote = ""; $("#oNote").value = ""; $("#cashIn").value = ""; setPay("tunai");
     const L = "-".repeat(34), C = s => s.padStart(Math.floor((34 + s.length) / 2)).padEnd(34);
     const m = modal(`<div class="head"><h3>Pembayaran berhasil</h3><span class="pill ok">${method === "qris" ? "QRIS" : "Tunai"}</span></div>
@@ -712,12 +779,13 @@ async function doPay() {
 
 /* ================= PREP ================= */
 async function vPrep(el) {
+  if (needOutlet(el)) return;
   const date = S.ui.prepDate || today();
   el.innerHTML = `<div class="head"><div><div class="eyebrow">Dapur</div><h2>Prep harian</h2></div><label style="flex:0 0 190px">Tanggal<input type="date" id="prepDate" value="${date}"></label></div>
     <p class="muted" style="max-width:68ch">Hitungan dalam <b>mangkuk</b>: <b class="ink">sisa kemarin + masak hari ini − terjual = tersedia</b>. Bubur Simpang 3 dan bubur polos sama-sama mengambil dari panci ini. Setiap catat masak memotong bahan dasar (beras); topping dan ekstra terpotong saat terjual. Saat tutup, catat porsi yang dibuang dan yang disimpan untuk besok; angka simpanan menjadi sisa kemarin di hari berikutnya.</p>
     <div class="grid2" id="prepCards"></div>`;
   $("#prepDate").onchange = e => { S.ui.prepDate = e.target.value; vPrep(el); };
-  try { await rpc("open_day", {p_date: date}); } catch (e) {}
+  try { await rpc("day_open", {p_date: date, p_loc: S.loc}); } catch (e) {}
   const d = await dayData(date);
   const items = S.menu.filter(m => m.kind === "base" && (m.active || d.prep.some(p => p.menu_item_id === m.id)));
   const hasRecipe = new Set((await q(SB.from("recipe_lines").select("menu_item_id"))).map(r => r.menu_item_id));
@@ -740,19 +808,20 @@ async function vPrep(el) {
     </div>`;
   }).join("") || `<div class="empty">Belum ada menu aktif.</div>`;
   $$("[data-prep]").forEach(b => b.onclick = () => { const n = parseInt($("#pq-" + b.dataset.prep).value); if (!(n > 0)) return toast("Isi jumlah porsi prep.", true);
-    busy(b, async () => { await rpc("record_prep", {p_date: date, p_menu: +b.dataset.prep, p_qty: n, p_note: null}); toast(n + " porsi dicatat."); vPrep(el); }); });
+    busy(b, async () => { await rpc("prep_add", {p_date: date, p_loc: S.loc, p_menu: +b.dataset.prep, p_qty: n, p_note: null}); toast(n + " porsi dicatat."); vPrep(el); }); });
   $$("[data-fix]").forEach(b => b.onclick = () => { const n = parseInt($("#pq-" + b.dataset.fix).value); if (!(n > 0)) return toast("Isi jumlah porsi yang ingin dikurangi.", true);
-    confirmBox("Koreksi prep", `Kurangi prep <b>${n} porsi</b>? Bahan dikembalikan ke stok.`, "Kurangi", async () => { await rpc("record_prep", {p_date: date, p_menu: +b.dataset.fix, p_qty: -n, p_note: "Koreksi prep −" + n}); toast("Prep dikoreksi."); vPrep(el); }); });
+    confirmBox("Koreksi prep", `Kurangi prep <b>${n} porsi</b>? Bahan dikembalikan ke stok.`, "Kurangi", async () => { await rpc("prep_add", {p_date: date, p_loc: S.loc, p_menu: +b.dataset.fix, p_qty: -n, p_note: "Koreksi prep −" + n}); toast("Prep dikoreksi."); vPrep(el); }); });
   $$("[data-close]").forEach(b => b.onclick = () => { const id = b.dataset.close;
-    busy(b, async () => { const r = await rpc("close_day", {p_date: date, p_menu: +id, p_waste: parseInt($("#pw-" + id).value || "0"), p_carry_out: parseInt($("#pc-" + id).value || "0"), p_notes: null});
+    busy(b, async () => { const r = await rpc("prep_close", {p_date: date, p_loc: S.loc, p_menu: +id, p_waste: parseInt($("#pw-" + id).value || "0"), p_carry_out: parseInt($("#pc-" + id).value || "0"), p_notes: null});
       toast(r.selisih === 0 ? "Prep ditutup, angka cocok." : `Prep ditutup, selisih ${r.selisih} porsi.`, r.selisih !== 0); vPrep(el); }); });
 }
 
 /* ================= CLOSING (kas + checklist) ================= */
 async function vClosing(el) {
+  if (needOutlet(el)) return;
   const date = S.ui.closeDate || today();
   const canCash = ["owner", "manager", "kasir"].includes(S.role);
-  const [prev, runs] = await Promise.all([canCash ? rpc("cash_preview", {p_date: date}) : null, q(SB.from("checklist_runs").select("*").eq("work_date", date))]);
+  const [prev, runs] = await Promise.all([canCash ? rpc("kas_preview", {p_date: date, p_loc: S.loc}) : null, q(SB.from("checklist_log").select("*").eq("work_date", date).eq("location_id", S.loc))]);
   const lists = S.settings.checklists || {opening: [], closing: []};
   const c = prev?.closing;
   el.innerHTML = `<div class="head"><div><div class="eyebrow">Akhir hari</div><h2>Closing</h2></div><label style="flex:0 0 190px">Tanggal<input type="date" id="clDate" value="${date}"></label></div>
@@ -783,7 +852,7 @@ async function vClosing(el) {
   $$("[data-ck]").forEach(b => b.onclick = async () => {
     const k = b.dataset.ck, i = +b.dataset.i, cur = runs.find(r => r.kind === k);
     const done = new Set(cur?.done || []); done.has(i) ? done.delete(i) : done.add(i);
-    await busy(b, async () => { await q(SB.from("checklist_runs").upsert({work_date: date, kind: k, done: [...done].sort((a, b) => a - b), by_user: S.me.id, updated_at: new Date().toISOString()}, {onConflict: "work_date,kind"})); vClosing(el); });
+    await busy(b, async () => { await q(SB.from("checklist_log").upsert({work_date: date, location_id: S.loc, kind: k, done: [...done].sort((a, b) => a - b), by_user: S.me.id, updated_at: new Date().toISOString()}, {onConflict: "work_date,location_id,kind"})); vClosing(el); });
   });
   const f = $("#cashForm"); if (!f) return;
   const calc = () => { const exp = pn(f.opening.value) + Number(prev.cash_sales) - pn(f.out.value), cnt = pn(f.counted.value), dif = cnt - exp, qd = pn(f.qris.value) - Number(prev.qris_sales);
@@ -793,7 +862,7 @@ async function vClosing(el) {
       <tr><td>Sisa modal di laci setelah setor</td><td class="num">${rp(cnt - pn(f.deposit.value))}</td></tr></tbody></table>`; };
   f.oninput = calc; calc();
   f.onsubmit = e => { e.preventDefault(); busy(f.querySelector("button"), async () => {
-    const r = await rpc("save_cash_closing", {p_date: date, p_opening: pn(f.opening.value), p_cash_out: pn(f.out.value), p_counted: pn(f.counted.value), p_qris_settled: pn(f.qris.value), p_deposit: pn(f.deposit.value), p_notes: f.notes.value || null});
+    const r = await rpc("kas_close", {p_date: date, p_loc: S.loc, p_opening: pn(f.opening.value), p_cash_out: pn(f.out.value), p_counted: pn(f.counted.value), p_qris_settled: pn(f.qris.value), p_deposit: pn(f.deposit.value), p_notes: f.notes.value || null});
     toast(Number(r.cash_diff) === 0 ? "Closing kas tersimpan, uang cocok." : "Closing kas tersimpan, selisih " + rp(r.cash_diff), Number(r.cash_diff) !== 0); vClosing(el); }); };
 }
 
@@ -827,7 +896,7 @@ async function vAbsensi(el) {
       const blob = await shrink(file, 720);
       const path = `absen/${S.me.id}/${d}-${k}-${Math.random().toString(36).slice(2, 10)}.jpg`;
       const up = await SB.storage.from("photos").upload(path, blob, {contentType: "image/jpeg"}); if (up.error) throw up.error;
-      await q(SB.from("attendance").insert({kind: k, photo_path: path}));
+      await q(SB.from("attendance").insert({kind: k, photo_path: path, location_id: S.loc}));
       toast(k === "masuk" ? "Absen masuk tercatat." : "Absen pulang tercatat."); vAbsensi(el);
     } catch (e) { toast(errMsg(e), true); }
   });
@@ -841,7 +910,7 @@ async function shrink(file, max) {
 }
 async function attAdmin(pub) {
   const box = $("#attAdmin"), d = S.ui.attDate || today(), m0 = d.slice(0, 8) + "01";
-  const [rows, recap] = await Promise.all([q(SB.from("attendance").select("*").eq("work_date", d).order("at")), rpc("attendance_recap", {p_start: m0, p_end: d})]);
+  const [rows, recap] = await Promise.all([q(SB.from("attendance").select("*").eq("work_date", d).eq("location_id", S.loc).order("at")), rpc("absen_recap", {p_start: m0, p_end: d, p_loc: S.loc})]);
   const shift = S.settings.targets?.shift_start || "07:00";
   box.innerHTML = `<div class="head"><h3 style="margin:0">Absensi tim</h3><label style="flex:0 0 190px">Tanggal<input type="date" id="attDate" value="${d}"></label></div>
     ${rows.length ? `<div class="photos">${rows.map(a => `<figure>${a.photo_path ? `<img src="${esc(pub(a.photo_path))}" alt="" loading="lazy">` : `<div class="shot">Tanpa foto</div>`}<figcaption><b>${esc(staffName(a.user_id))}</b><br>${a.kind === "masuk" ? "Masuk" : "Pulang"} ${fTime(a.at)}</figcaption></figure>`).join("")}</div>` : `<p class="muted">Belum ada yang absen di tanggal ini.</p>`}
@@ -858,8 +927,8 @@ async function vStok(el) {
   const cats = [...new Set(S.ing.map(i => i.category || "Bahan"))];
   const low = S.ing.filter(i => i.active && Number(i.min_stock) > 0 && Number(i.stock_qty) <= Number(i.min_stock));
   const value = S.ing.reduce((a, i) => a + Math.max(0, Number(i.stock_qty)) * Number(i.cost_per_unit), 0);
-  el.innerHTML = `<div class="head"><div><div class="eyebrow">Gudang</div><h2>Stok bahan baku</h2></div>
-    <div class="row" style="flex:1 1 auto;justify-content:flex-end"><button class="btn fit" id="wasteBtn" ${S.ing.length ? "" : "disabled"}>Catat waste bahan</button>${low.length ? `<button class="btn pri fit" id="toOrder">Order ${low.length} bahan menipis</button>` : ""}</div></div>
+  el.innerHTML = `<div class="head"><div><div class="eyebrow">${esc(curLoc()?.name || "")}</div><h2>Stok bahan baku</h2></div>
+    <div class="row" style="flex:1 1 auto;justify-content:flex-end">${isAdmin() ? `<button class="btn fit" id="allLoc">Semua lokasi</button>` : ""}<button class="btn fit" id="wasteBtn" ${S.ing.length ? "" : "disabled"}>Catat waste bahan</button>${low.length ? `<button class="btn pri fit" id="toOrder">Order ${low.length} bahan menipis</button>` : ""}</div></div>
     ${isAdmin() ? `<div class="kpis"><div class="kpi"><span class="eyebrow">Nilai stok</span><b>${rp(value)}</b></div><div class="kpi"><span class="eyebrow">Jumlah bahan</span><b>${S.ing.filter(i => i.active).length}</b></div><div class="kpi"><span class="eyebrow">Menipis / habis</span><b>${low.length}</b></div></div>` : ""}
     <div class="panel tbl">${S.ing.length ? `<table><thead><tr><th>Bahan</th><th class="num">Stok</th><th class="num">Min</th><th class="num">Par</th>${isAdmin() ? `<th class="num">HPP/satuan</th><th class="num">Nilai</th>` : ""}<th>Status</th>${isAdmin() ? "<th></th>" : ""}</tr></thead><tbody>
       ${cats.map(c => `<tr><td colspan="9" class="eyebrow" style="padding-top:1rem">${esc(c)}</td></tr>` + S.ing.filter(i => (i.category || "Bahan") === c).map(i => { const n = Number(i.stock_qty), mn = Number(i.min_stock);
@@ -869,6 +938,15 @@ async function vStok(el) {
           <td><span class="pill ${st[0]}">${st[1]}</span></td>${isAdmin() ? `<td class="num"><button class="btn ghost sm" data-opn="${i.id}">Opname</button></td>` : ""}</tr>`; }).join("")).join("")}
     </tbody></table>` : `<div class="empty">${logoSvg(LOGO_EMBLEM, "emb")}<b>Belum ada bahan baku</b><span>Owner bisa menambahkannya di Pengaturan → Bahan baku, lalu isi resep dari COGS.</span></div>`}</div>
     <div class="panel"><h3>Pergerakan stok terakhir</h3><div class="tbl" id="moves"><p class="muted">Memuat…</p></div></div>`;
+  $("#allLoc")?.addEventListener("click", async () => {
+    const lv = await q(SB.from("stock_levels").select("*")), locs = S.locs.filter(l => l.active);
+    const cell = (i, l) => { const x = lv.find(y => y.ingredient_id === i.id && y.location_id === l.id) || {qty: 0, min_stock: 0}; const n = Number(x.qty), mn = Number(x.min_stock);
+      return `<td class="num"><span style="color:${n < 0 ? "var(--bad)" : mn > 0 && n <= mn ? "var(--warn)" : "inherit"}">${num(n)}</span></td>`; };
+    modal(`<div class="head"><h3>Stok semua lokasi</h3><button class="btn sm fit" onclick="document.getElementById('modalRoot').innerHTML=''">Tutup</button></div>
+      <div class="tbl" style="max-height:70vh;overflow:auto"><table><thead><tr><th>Bahan</th><th>Satuan</th>${locs.map(l => `<th class="num">${esc(l.name)}</th>`).join("")}<th class="num">Total</th></tr></thead><tbody>
+      ${S.ing.filter(i => i.active).map(i => `<tr><td>${esc(i.name)}</td><td class="muted">${esc(i.unit)}</td>${locs.map(l => cell(i, l)).join("")}<td class="num"><b>${num(lv.filter(y => y.ingredient_id === i.id).reduce((a, y) => a + Number(y.qty), 0))}</b></td></tr>`).join("")}
+      </tbody></table></div><p class="muted small">Oranye = di bawah minimum lokasi itu, merah = minus (perlu opname).</p>`, true);
+  });
   $("#toOrder")?.addEventListener("click", () => { S.ui.suggest = true; go("order"); });
   $("#wasteBtn").onclick = () => {
     const m = modal(`<h3>Catat waste bahan</h3><p class="muted small">Untuk bahan yang rusak, tumpah, atau kedaluwarsa. Stok langsung berkurang.</p>
@@ -876,16 +954,16 @@ async function vStok(el) {
       <label>Jumlah<input id="wsQ" inputmode="decimal"></label><label>Alasan<input id="wsR" placeholder="mis. basi, tumpah"></label>
       <div class="row" style="justify-content:flex-end"><button class="btn ghost fit" id="wsNo">Batal</button><button class="btn pri fit" id="wsOk">Simpan</button></div>`);
     m.querySelector("#wsNo").onclick = closeModal;
-    m.querySelector("#wsOk").onclick = e => busy(e.target, async () => { await rpc("record_waste", {p_ingredient: +m.querySelector("#wsI").value, p_qty: pd(m.querySelector("#wsQ").value), p_reason: m.querySelector("#wsR").value}); closeModal(); toast("Waste dicatat."); vStok(el); });
+    m.querySelector("#wsOk").onclick = e => busy(e.target, async () => { await rpc("stok_waste", {p_ing: +m.querySelector("#wsI").value, p_loc: S.loc, p_qty: pd(m.querySelector("#wsQ").value), p_reason: m.querySelector("#wsR").value}); closeModal(); toast("Waste dicatat."); vStok(el); });
   };
   $$("[data-opn]").forEach(b => b.onclick = () => { const i = ingById(+b.dataset.opn);
     const m = modal(`<h3>Stock opname · ${esc(i.name)}</h3><p class="muted">Stok di sistem <b>${num(i.stock_qty)} ${esc(i.unit)}</b>. Isi hasil hitung fisik.</p>
       <label>Stok fisik (${esc(i.unit)})<input id="opQ" inputmode="decimal"></label><label>Catatan<input id="opN" placeholder="Opname mingguan"></label>
       <div class="row" style="justify-content:flex-end"><button class="btn ghost fit" id="opNo">Batal</button><button class="btn pri fit" id="opOk">Simpan</button></div>`);
     m.querySelector("#opNo").onclick = closeModal;
-    m.querySelector("#opOk").onclick = e => { const v = m.querySelector("#opQ").value; if (v === "") return; busy(e.target, async () => { await rpc("adjust_stock", {p_ingredient: i.id, p_new_qty: pd(v), p_note: m.querySelector("#opN").value || null}); closeModal(); toast("Stok diperbarui."); vStok(el); }); };
+    m.querySelector("#opOk").onclick = e => { const v = m.querySelector("#opQ").value; if (v === "") return; busy(e.target, async () => { await rpc("stok_opname", {p_ing: i.id, p_loc: S.loc, p_new: pd(v), p_note: m.querySelector("#opN").value || null}); closeModal(); toast("Stok diperbarui."); vStok(el); }); };
   });
-  const mv = await q(SB.from("stock_movements").select("*").order("created_at", {ascending: false}).limit(80));
+  const mv = await q(SB.from("stock_movements").select("*").eq("location_id", S.loc).order("created_at", {ascending: false}).limit(80));
   const lab = x => x.type === "purchase" ? ["ok", "Masuk"] : x.type === "prep" ? ["ink", "Prep"] : x.adj_kind === "waste" ? ["bad", "Waste"] : ["idle", "Opname"];
   $("#moves").innerHTML = mv.length ? `<table><thead><tr><th>Waktu</th><th>Bahan</th><th>Jenis</th><th class="num">Perubahan</th><th>Keterangan</th></tr></thead><tbody>
     ${mv.map(x => { const i = ingById(x.ingredient_id), l = lab(x); return `<tr><td class="small">${fDT(x.created_at)}</td><td>${esc(i?.name)}</td><td><span class="pill ${l[0]}">${l[1]}</span></td>
@@ -896,7 +974,7 @@ async function vStok(el) {
 const statusPill = s => `<span class="pill ${{draft: "warn", dipesan: "ink", diterima: "ok", batal: "idle"}[s]}">${{draft: "Menunggu disetujui", dipesan: "Sudah dipesan", diterima: "Diterima", batal: "Batal"}[s]}</span>`;
 async function vOrder(el) {
   await loadMaster();
-  const orders = await q(SB.from("orders").select("*").order("created_at", {ascending: false}).limit(40));
+  const orders = await q(SB.from("orders").select("*").eq("location_id", S.loc).order("created_at", {ascending: false}).limit(40));
   const low = S.ing.filter(i => i.active && Number(i.min_stock) > 0 && Number(i.stock_qty) <= Number(i.min_stock));
   el.innerHTML = `<div class="head"><div><div class="eyebrow">Gudang</div><h2>Order bahan</h2></div><button class="btn pri fit" id="newOrder" ${S.ing.length ? "" : "disabled"}>Buat order</button></div>
     <p class="muted" style="max-width:70ch">Alur: <b class="ink">buat order → disetujui & dipesan (Owner/Manager) → terima barang</b>. Saat barang diterima, harga asli dicatat sebagai pembelian dan stok bertambah otomatis.</p>
@@ -949,7 +1027,7 @@ function orderForm(el, o, items, sup) {
   m.querySelector("#ofOk").onclick = e => { const its = lines.filter(l => l.ingredient_id && pd(l.qty) > 0).map(l => ({ingredient_id: +l.ingredient_id, qty: pd(l.qty), est_price: Number(l.est_price || ingById(+l.ingredient_id)?.cost_per_unit || 0)}));
     if (!its.length) return toast("Isi minimal satu bahan dan jumlahnya.", true);
     busy(e.target, async () => { const row = {supplier: m.querySelector("#ofS").value.trim() || null, eta: m.querySelector("#ofE").value || null, note: m.querySelector("#ofN").value || null, items: its};
-      if (o) await q(SB.from("orders").update(row).eq("id", o.id)); else await q(SB.from("orders").insert(row));
+      if (o) await q(SB.from("orders").update(row).eq("id", o.id)); else await q(SB.from("orders").insert({...row, location_id: S.loc}));
       closeModal(); toast(o ? "Order diperbarui." : "Order dibuat."); vOrder(el); refreshBadges(); }); };
 }
 function waText(o) {
@@ -975,15 +1053,79 @@ async function orderAction(el, o, act, btn) {
     m.querySelector("#rvNo").onclick = closeModal;
     m.querySelector("#rvOk").onclick = e => { const its = lines.filter(l => pd(l.qty) > 0).map(l => { const n = pd(l.qty); return {ingredient_id: l.ingredient_id, qty: n, unit_price: pn(l.total) / n}; });
       if (!its.length) return toast("Tidak ada barang yang diterima.", true);
-      busy(e.target, async () => { await rpc("receive_order", {p_order: o.id, p_items: its, p_paid: paid, p_due: paid ? null : m.querySelector("#rvDue").value}); closeModal(); toast("Barang diterima, stok bertambah."); await loadMaster(); vOrder(el); refreshBadges(); }); };
+      busy(e.target, async () => { await rpc("order_terima", {p_order: o.id, p_items: its, p_paid: paid, p_due: paid ? null : m.querySelector("#rvDue").value}); closeModal(); toast("Barang diterima, stok bertambah."); await loadMaster(); vOrder(el); refreshBadges(); }); };
   }
+}
+
+/* ================= KIRIM STOK ================= */
+async function vKirim(el) {
+  await loadMaster();
+  const L = curLoc(), others = S.locs.filter(l => l.active && l.id !== S.loc);
+  const [incoming, hist] = await Promise.all([
+    q(SB.from("transfers").select("*").eq("to_location", S.loc).eq("status", "dikirim").order("created_at", {ascending: false})),
+    q(SB.from("transfers").select("*").or(`from_location.eq.${S.loc},to_location.eq.${S.loc}`).order("created_at", {ascending: false}).limit(30))
+  ]);
+  S.ui.tr ||= {to: others.find(l => l.kind === "outlet")?.id || others[0]?.id, lines: [{ing: "", qty: ""}], note: ""};
+  const T = S.ui.tr; if (!others.some(l => l.id === T.to)) T.to = others[0]?.id;
+  const itemsTxt = it => (it || []).map(x => { const i = ingById(x.ingredient_id); return `${esc(i?.name || "?")} ${num(x.qty)} ${esc(i?.unit || "")}`; }).join(", ");
+  const pill = t => `<span class="pill ${{dikirim: "warn", diterima: "ok", batal: "idle"}[t.status]}">${{dikirim: "Dalam perjalanan", diterima: "Diterima", batal: "Batal"}[t.status]}</span>`;
+  el.innerHTML = `<div class="head"><div><div class="eyebrow">Gudang</div><h2>Kirim stok</h2></div><span class="pill ink">${esc(L?.name || "")}</span></div>
+    <p class="muted" style="max-width:70ch">Alur: <b class="ink">kirim dari ${esc(L?.name || "lokasi ini")} → outlet menerima dan mencocokkan jumlahnya</b>. Stok berkurang di pengirim saat dikirim, dan bertambah di penerima saat diterima.</p>
+    ${incoming.length ? `<div class="panel" style="border-color:var(--pay)"><h3>Kiriman masuk untuk ${esc(L?.name)}</h3><div class="stack">${incoming.map(t => `<div class="row" style="align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding-top:.6rem">
+        <div style="flex:1 1 260px"><b>#${t.id} dari ${esc(locName(t.from_location))}</b><div class="muted small">${fDT(t.created_at)} · ${esc(staffName(t.created_by))}${t.note ? " · " + esc(t.note) : ""}</div><div class="small">${itemsTxt(t.items)}</div></div>
+        <button class="btn pri fit" data-recv="${t.id}">Terima barang</button></div>`).join("")}</div></div>` : ""}
+    <div class="panel stack">
+      <h3 style="margin:0">Kirim baru</h3>
+      <div class="row"><label>Dari<input value="${esc(L?.name || "")}" disabled></label>
+        <label>Ke<select id="trTo">${others.map(l => `<option value="${l.id}" ${l.id === T.to ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</select></label>
+        <label>Catatan<input id="trNote" value="${esc(T.note)}" placeholder="mis. kiriman pagi"></label></div>
+      <div id="trLines" class="stack" style="gap:.5rem"></div>
+      <div class="row" style="justify-content:space-between"><div class="row fit" style="flex:0 0 auto"><button class="btn sm fit" id="trAdd">+ Tambah bahan</button><button class="btn sm fit" id="trNeed">Isi sesuai kebutuhan tujuan</button></div>
+        <button class="btn pri fit" id="trSend">Kirim</button></div>
+    </div>
+    <div class="panel"><h3>Riwayat kiriman</h3>${hist.length ? `<div class="tbl"><table><thead><tr><th>#</th><th>Waktu</th><th>Rute</th><th>Barang</th><th>Status</th><th></th></tr></thead><tbody>
+      ${hist.map(t => `<tr><td>${t.id}</td><td class="small">${fDT(t.created_at)}</td><td>${esc(locName(t.from_location))} → ${esc(locName(t.to_location))}</td><td class="small">${itemsTxt(t.status === "diterima" ? t.received_items : t.items)}</td><td>${pill(t)}</td>
+        <td class="num">${t.status === "dikirim" && isAdmin() ? `<button class="btn danger sm" data-trx="${t.id}">Batalkan</button>` : ""}</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">Belum ada kiriman.</p>`}</div>`;
+  const opts = S.ing.filter(i => i.active).map(i => `<option value="${i.id}">${esc(i.name)} (${esc(i.unit)}) · stok ${num(i.stock_qty)}</option>`).join("");
+  const draw = () => {
+    $("#trLines").innerHTML = T.lines.map((l, i) => `<div class="row"><label>Bahan<select data-tl="${i}" data-k="ing"><option value="">Pilih bahan</option>${opts}</select></label>
+      <label style="flex:0 1 150px">Jumlah${l.ing ? ` (${esc(ingById(+l.ing)?.unit || "")})` : ""}<input data-tl="${i}" data-k="qty" inputmode="decimal" value="${esc(l.qty)}"></label><button class="btn danger sm fit" data-trm="${i}" aria-label="Hapus">×</button></div>`).join("");
+    $$("select[data-tl]").forEach(x => x.value = T.lines[x.dataset.tl].ing);
+    $$("[data-tl]").forEach(x => { x.oninput = () => T.lines[x.dataset.tl][x.dataset.k] = x.value; x.onchange = () => { T.lines[x.dataset.tl][x.dataset.k] = x.value; if (x.tagName === "SELECT") draw(); }; });
+    $$("[data-trm]").forEach(b => b.onclick = () => { T.lines.splice(+b.dataset.trm, 1); if (!T.lines.length) T.lines.push({ing: "", qty: ""}); draw(); });
+  };
+  draw();
+  $("#trTo").onchange = e => T.to = +e.target.value;
+  $("#trNote").oninput = e => T.note = e.target.value;
+  $("#trAdd").onclick = () => { T.lines.push({ing: "", qty: ""}); draw(); };
+  $("#trNeed").onclick = e => busy(e.target, async () => {
+    const lv = await q(SB.from("stock_levels").select("*").eq("location_id", T.to));
+    const need = lv.map(l => ({l, n: Math.max(Number(l.par_stock) - Number(l.qty), 0)})).filter(x => x.n > 0 && Number(x.l.qty) <= Number(x.l.min_stock) && ingById(x.l.ingredient_id)?.active);
+    if (!need.length) return toast("Stok " + locName(T.to) + " masih aman, atau min/par belum diisi.");
+    T.lines = need.map(x => ({ing: String(x.l.ingredient_id), qty: String(+x.n.toFixed(3)).replace(".", ",")})); draw();
+    toast(need.length + " bahan diisi sesuai par " + locName(T.to) + ".");
+  });
+  $("#trSend").onclick = e => { const its = T.lines.filter(l => l.ing && pd(l.qty) > 0).map(l => ({ingredient_id: +l.ing, qty: pd(l.qty)}));
+    if (!its.length) return toast("Isi minimal satu bahan dan jumlahnya.", true);
+    const short = its.filter(x => x.qty > (ingById(x.ingredient_id)?.stock_qty || 0));
+    const send = () => busy(e.target, async () => { const id = await rpc("transfer_kirim", {p_from: S.loc, p_to: T.to, p_items: its, p_note: T.note || null}); S.ui.tr = null; toast(`Kiriman #${id} ke ${locName(T.to)} tercatat.`); vKirim(el); });
+    if (short.length) confirmBox("Stok tidak cukup", `${short.map(x => esc(ingById(x.ingredient_id)?.name)).join(", ")} melebihi stok tercatat di ${esc(L?.name)}. Tetap kirim? Stok di sini akan minus sampai dicek.`, "Tetap kirim", send); else send(); };
+  $$("[data-recv]").forEach(b => b.onclick = () => { const t = incoming.find(x => x.id === +b.dataset.recv), lines = (t.items || []).map(x => ({...x}));
+    const m = modal(`<h3>Terima kiriman #${t.id}</h3><p class="muted small">Dari ${esc(locName(t.from_location))}. Ubah jumlah bila yang datang berbeda.</p>
+      <div class="stack" style="gap:.5rem">${lines.map((x, i) => { const g = ingById(x.ingredient_id); return `<div class="row" style="align-items:center"><div style="flex:1 1 160px"><b>${esc(g?.name)}</b><div class="muted small">dikirim ${num(x.qty)} ${esc(g?.unit)}</div></div><label style="flex:0 1 140px">Diterima<input data-rq="${i}" inputmode="decimal" value="${num(x.qty, 3)}"></label></div>`; }).join("")}</div>
+      <div class="row" style="justify-content:flex-end"><button class="btn fit" id="rNo">Batal</button><button class="btn pri fit" id="rOk">Simpan penerimaan</button></div>`, true);
+    m.querySelectorAll("[data-rq]").forEach(x => x.oninput = () => lines[x.dataset.rq].qty = pd(x.value));
+    m.querySelector("#rNo").onclick = closeModal;
+    m.querySelector("#rOk").onclick = ev => busy(ev.target, async () => { await rpc("transfer_terima", {p_id: t.id, p_items: lines.map(x => ({ingredient_id: x.ingredient_id, qty: Number(x.qty) || 0}))}); closeModal(); toast("Kiriman diterima, stok bertambah."); vKirim(el); refreshBadges(); });
+  });
+  $$("[data-trx]").forEach(b => b.onclick = () => confirmBox("Batalkan kiriman?", `Barang kiriman #${b.dataset.trx} dikembalikan ke stok pengirim.`, "Batalkan", async () => { await rpc("transfer_batal", {p_id: +b.dataset.trx}); toast("Kiriman dibatalkan."); vKirim(el); }, {danger: true}));
 }
 
 /* ================= PEMBELIAN ================= */
 async function vPembelian(el) {
   await loadMaster();
   if (!S.buy.length) S.buy = [{ing: "", qty: "", total: ""}];
-  const list = await q(SB.from("purchases").select("*, purchase_items(*)").order("purchase_date", {ascending: false}).order("id", {ascending: false}).limit(40));
+  const list = await q(SB.from("purchases").select("*, purchase_items(*)").eq("location_id", S.loc).order("purchase_date", {ascending: false}).order("id", {ascending: false}).limit(40));
   el.innerHTML = `<div class="head"><div><div class="eyebrow">Gudang</div><h2>Pembelian bahan</h2></div></div>
     <p class="muted" style="max-width:70ch">Untuk belanja langsung tanpa order (mis. beli di pasar pagi ini). Harga pokok bahan diperbarui otomatis memakai rata-rata.</p>
     <div class="panel ink-b stack">
@@ -1018,7 +1160,7 @@ async function vPembelian(el) {
   $("#bAdd").onclick = () => { S.buy.push({ing: "", qty: "", total: ""}); draw(); };
   $("#bSave").onclick = e => { const its = S.buy.filter(l => l.ing && pd(l.qty) > 0).map(l => ({ingredient_id: +l.ing, qty: pd(l.qty), unit_price: pn(l.total) / pd(l.qty)}));
     if (!its.length) return toast("Isi minimal satu bahan dengan jumlahnya.", true);
-    busy(e.target, async () => { await rpc("save_purchase", {p_date: $("#bD").value || today(), p_supplier: $("#bS").value.trim() || null, p_notes: $("#bN").value || null, p_items: its, p_paid: paid, p_due: paid ? null : $("#bDue").value, p_order: null});
+    busy(e.target, async () => { await rpc("beli", {p_loc: S.loc, p_date: $("#bD").value || today(), p_supplier: $("#bS").value.trim() || null, p_notes: $("#bN").value || null, p_items: its, p_paid: paid, p_due: paid ? null : $("#bDue").value, p_order: null});
       S.buy = []; toast("Pembelian disimpan, stok bertambah."); vPembelian(el); refreshBadges(); }); };
   $$("[data-pay]").forEach(b => b.onclick = () => confirmBox("Tandai lunas?", "Pembelian ini dicatat sudah dibayar ke supplier.", "Tandai lunas", async () => { await rpc("pay_purchase", {p_id: +b.dataset.pay}); toast("Ditandai lunas."); vPembelian(el); }));
 }
@@ -1033,8 +1175,11 @@ function rangeOf(p) {
 }
 function rangeBar(key, onChange) {
   const r = S.ui[key] ||= {p: "month", s: rangeOf("month")[0], e: rangeOf("month")[1]};
-  const html = `<div class="row" style="flex:0 1 560px"><select id="${key}P">${[["today", "Hari ini"], ["7", "7 hari terakhir"], ["30", "30 hari terakhir"], ["month", "Bulan ini"], ["lastmonth", "Bulan lalu"], ["custom", "Pilih tanggal"]].map(([v, l]) => `<option value="${v}" ${r.p === v ? "selected" : ""}>${l}</option>`).join("")}</select><input type="date" id="${key}S" value="${r.s}"><input type="date" id="${key}E" value="${r.e}"></div>`;
+  if (S.ui.repLoc === undefined) S.ui.repLoc = "";
+  const outs = S.locs.filter(l => l.kind === "outlet" && l.active);
+  const html = `<div class="row" style="flex:0 1 720px"><select id="${key}L" aria-label="Outlet"><option value="">Semua outlet</option>${outs.map(l => `<option value="${l.id}" ${String(S.ui.repLoc) === String(l.id) ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</select><select id="${key}P">${[["today", "Hari ini"], ["7", "7 hari terakhir"], ["30", "30 hari terakhir"], ["month", "Bulan ini"], ["lastmonth", "Bulan lalu"], ["custom", "Pilih tanggal"]].map(([v, l]) => `<option value="${v}" ${r.p === v ? "selected" : ""}>${l}</option>`).join("")}</select><input type="date" id="${key}S" value="${r.s}"><input type="date" id="${key}E" value="${r.e}"></div>`;
   const bind = () => {
+    $(`#${key}L`).onchange = e => { S.ui.repLoc = e.target.value; onChange(); };
     $(`#${key}P`).onchange = e => { r.p = e.target.value; if (r.p !== "custom") [r.s, r.e] = rangeOf(r.p); onChange(); };
     $(`#${key}S`).onchange = e => { r.p = "custom"; r.s = e.target.value; onChange(); };
     $(`#${key}E`).onchange = e => { r.p = "custom"; r.e = e.target.value; onChange(); };
@@ -1046,7 +1191,8 @@ function daysBetween(s, e) { const out = []; for (let d = s; d <= e && out.lengt
 /* ================= KEUANGAN ================= */
 async function vLaporan(el) {
   const rb = rangeBar("rep", () => vLaporan(el)); const {s, e} = rb.r;
-  const [r, ex, cc] = await Promise.all([rpc("get_report", {p_start: s, p_end: e}), q(SB.from("expenses").select("*").gte("expense_date", s).lte("expense_date", e).order("expense_date", {ascending: false})), q(SB.from("cash_closings").select("*").gte("work_date", s).lte("work_date", e).order("work_date", {ascending: false}))]);
+  const RL = S.ui.repLoc ? +S.ui.repLoc : null, byLoc = qq => RL ? qq.eq("location_id", RL) : qq.not("location_id", "is", null);
+  const [r, ex, cc] = await Promise.all([rpc("lap_report", {p_start: s, p_end: e, p_loc: RL}), q(byLoc(SB.from("expenses").select("*").gte("expense_date", s).lte("expense_date", e)).order("expense_date", {ascending: false})), q(byLoc(SB.from("kas_closing").select("*").gte("work_date", s).lte("work_date", e)).order("work_date", {ascending: false}))]);
   const om = Number(r.omzet), hpp = Number(r.hpp), laba = om - hpp, waste = Number(r.waste_value) + Number(r.waste_bahan) - Number(r.selisih_opname);
   const bersih = laba - waste - Number(r.biaya);
   const fc = om ? hpp / om * 100 : 0, tgt = Number(S.settings.targets?.food_cost || 35);
@@ -1061,6 +1207,7 @@ async function vLaporan(el) {
       <div class="kpi"><span class="eyebrow">Utang supplier</span><b>${rp(r.utang)}</b><span class="small">${(r.utang_list || []).length} nota belum lunas</span></div>
     </div>
     <div class="grid2">
+      ${!RL && (r.per_loc || []).length > 1 ? `<div class="panel"><h3>Per outlet</h3>${r.per_loc.map(x => { const mx = Math.max(1, ...r.per_loc.map(y => Number(y.omzet))); return `<div class="hbar"><span>${esc(x.name)}</span><span class="tr"><i style="width:${Number(x.omzet) / mx * 100}%"></i></span><span class="num small">${rp(x.omzet)} · ${x.trx} trx</span></div>`; }).join("")}</div>` : ""}
       <div class="panel"><h3>Omzet harian</h3><div class="bars">${days.map(d => { const v = Number(map[d]?.omzet || 0); return `<div class="bar${v ? "" : " dim"}" style="height:${Math.max(1.5, v / max * 100)}%" data-tip="${fDate(d)}: ${rp(v)} · ${map[d]?.porsi || 0} porsi"></div>`; }).join("")}</div>
         <div class="axis"><span>${fDate(days[0])}</span><span>tertinggi ${rp(max)}</span><span>${fDate(days[days.length - 1])}</span></div></div>
       <div class="panel"><h3>Laba rugi</h3><div class="tbl"><table><tbody>
@@ -1084,18 +1231,18 @@ async function vLaporan(el) {
       <div class="panel"><h3>Per menu</h3>${(r.per_menu || []).length ? `<div class="tbl"><table><thead><tr><th>Menu</th><th class="num">Porsi</th><th class="num">Omzet</th><th class="num">HPP</th><th class="num">Margin</th></tr></thead><tbody>
         ${r.per_menu.map(x => `<tr><td>${esc(x.name)}</td><td class="num">${x.qty}</td><td class="num">${rp(x.omzet)}</td><td class="num">${rp(x.hpp)}</td><td class="num">${x.omzet ? Math.round((x.omzet - x.hpp) / x.omzet * 100) : 0}%</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">Belum ada penjualan di periode ini.</p>`}</div>
       <div class="panel stack"><h3 style="margin:0">Biaya operasional</h3>
-        <div class="row"><label>Tanggal<input type="date" id="xD" value="${today()}"></label><label>Kategori<select id="xC">${["Bahan baku", "Kemasan", "Gas", "Transport", "Perlengkapan", "Tenaga kerja", "Gaji", "Sewa", "Listrik & air", "Perawatan", "Marketing", "Aset & investasi", "Lainnya"].map(c => `<option>${c}</option>`).join("")}</select></label><label>Jumlah (Rp)<input id="xA" inputmode="numeric"></label></div>
+        <div class="row"><label>Lokasi<select id="xL">${S.locs.filter(l => l.active).map(l => `<option value="${l.id}" ${l.id === (RL || S.loc) ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</select></label><label>Tanggal<input type="date" id="xD" value="${today()}"></label><label>Kategori<select id="xC">${["Bahan baku", "Kemasan", "Gas", "Transport", "Perlengkapan", "Tenaga kerja", "Gaji", "Sewa", "Listrik & air", "Perawatan", "Marketing", "Aset & investasi", "Lainnya"].map(c => `<option>${c}</option>`).join("")}</select></label><label>Jumlah (Rp)<input id="xA" inputmode="numeric"></label></div>
         <div class="row"><label>Catatan<input id="xN"></label><button class="btn pri" id="xSave">Tambah biaya</button></div>
-        ${ex.length ? `<p class="muted small">${ex.length} catatan · total ${rp(ex.reduce((a, x) => a + Number(x.amount), 0))}</p><div class="tbl" style="max-height:420px;overflow:auto"><table><tbody>${ex.map(x => `<tr><td class="small">${fDate(x.expense_date)}</td><td>${esc(x.category)}<div class="muted small">${esc(x.notes || "")}</div></td><td class="num">${rp(x.amount)}</td><td class="num"><button class="btn danger sm" data-dx="${x.id}" aria-label="Hapus">×</button></td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">Belum ada biaya di periode ini.</p>`}
+        ${ex.length ? `<p class="muted small">${ex.length} catatan · total ${rp(ex.reduce((a, x) => a + Number(x.amount), 0))}</p><div class="tbl" style="max-height:420px;overflow:auto"><table><tbody>${ex.map(x => `<tr><td class="small">${fDate(x.expense_date)}</td><td>${esc(x.category)}<div class="muted small">${RL ? "" : esc(locName(x.location_id)) + " · "}${esc(x.notes || "")}</div></td><td class="num">${rp(x.amount)}</td><td class="num"><button class="btn danger sm" data-dx="${x.id}" aria-label="Hapus">×</button></td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">Belum ada biaya di periode ini.</p>`}
       </div>
     </div>
     <div class="grid2">
       <div class="panel"><h3>Utang supplier</h3>${(r.utang_list || []).length ? `<div class="tbl"><table><tbody>${r.utang_list.map(u => `<tr><td>${esc(u.supplier || "—")}<div class="muted small">nota ${fDate(u.date)}</div></td><td>${u.due ? `<span class="pill ${u.due < today() ? "bad" : "warn"}">jatuh tempo ${fDate(u.due)}</span>` : ""}</td><td class="num">${rp(u.total)}</td><td class="num"><button class="btn ghost sm" data-pay="${u.id}">Lunas</button></td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">Tidak ada utang supplier.</p>`}</div>
-      <div class="panel"><h3>Closing kas</h3>${cc.length ? `<div class="tbl"><table><thead><tr><th>Tanggal</th><th class="num">Tunai</th><th class="num">QRIS</th><th class="num">Selisih</th><th class="num">Setor</th></tr></thead><tbody>${cc.map(c => `<tr><td>${fDate(c.work_date)}<div class="muted small">${esc(staffName(c.closed_by))}</div></td><td class="num">${rp(c.cash_sales)}</td><td class="num">${rp(c.qris_sales)}</td><td class="num"><span class="pill ${Number(c.cash_diff) === 0 ? "ok" : "bad"}">${rp(c.cash_diff)}</span></td><td class="num">${rp(c.deposit)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">Belum ada closing kas di periode ini.</p>`}</div>
+      <div class="panel"><h3>Closing kas</h3>${cc.length ? `<div class="tbl"><table><thead><tr><th>Tanggal</th><th class="num">Tunai</th><th class="num">QRIS</th><th class="num">Selisih</th><th class="num">Setor</th></tr></thead><tbody>${cc.map(c => `<tr><td>${fDate(c.work_date)}<div class="muted small">${esc(locName(c.location_id))} · ${esc(staffName(c.closed_by))}</div></td><td class="num">${rp(c.cash_sales)}</td><td class="num">${rp(c.qris_sales)}</td><td class="num"><span class="pill ${Number(c.cash_diff) === 0 ? "ok" : "bad"}">${rp(c.cash_diff)}</span></td><td class="num">${rp(c.deposit)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">Belum ada closing kas di periode ini.</p>`}</div>
     </div>`;
   rb.bind();
   $("#xSave").onclick = ev => { const a = pn($("#xA").value); if (!(a > 0)) return toast("Isi jumlah biaya.", true);
-    busy(ev.target, async () => { await q(SB.from("expenses").insert({expense_date: $("#xD").value || today(), category: $("#xC").value, amount: a, notes: $("#xN").value || null})); toast("Biaya ditambahkan."); vLaporan(el); }); };
+    busy(ev.target, async () => { await q(SB.from("expenses").insert({location_id: +$("#xL").value, expense_date: $("#xD").value || today(), category: $("#xC").value, amount: a, notes: $("#xN").value || null})); toast("Biaya ditambahkan."); vLaporan(el); }); };
   $$("[data-dx]").forEach(b => b.onclick = () => confirmBox("Hapus biaya?", "Catatan biaya ini dihapus dari laporan.", "Hapus", async () => { await q(SB.from("expenses").delete().eq("id", +b.dataset.dx)); vLaporan(el); }, {danger: true}));
   $$("[data-pay]").forEach(b => b.onclick = () => confirmBox("Tandai lunas?", "Nota ini dicatat sudah dibayar.", "Tandai lunas", async () => { await rpc("pay_purchase", {p_id: +b.dataset.pay}); toast("Ditandai lunas."); vLaporan(el); }));
 }
@@ -1103,7 +1250,8 @@ async function vLaporan(el) {
 /* ================= ANALITIK ================= */
 async function vAnalitik(el) {
   const rb = rangeBar("ana", () => vAnalitik(el)); const {s, e} = rb.r;
-  const [a, r] = await Promise.all([rpc("get_analytics", {p_start: s, p_end: e}), rpc("get_report", {p_start: s, p_end: e})]);
+  const RL = S.ui.repLoc ? +S.ui.repLoc : null;
+  const [a, r] = await Promise.all([rpc("lap_analytics", {p_start: s, p_end: e, p_loc: RL}), rpc("lap_report", {p_start: s, p_end: e, p_loc: RL})]);
   const hours = Array.from({length: 24}, (_, h) => a.by_hour.find(x => x.h === h) || {h, trx: 0, omzet: 0});
   const firstH = Math.min(...a.by_hour.map(x => x.h), 6), lastH = Math.max(...a.by_hour.map(x => x.h), 14);
   const hs = hours.slice(firstH, lastH + 1), hmax = Math.max(1, ...hs.map(x => x.trx));
@@ -1191,7 +1339,7 @@ const SET = {
       busy(e.target, async () => { await q(SB.from("menu_items").insert({name: n, category: $("#nmC").value.trim() || "Bubur", price: p, sort: S.menu.length + 1})); toast("Menu ditambahkan."); re(); }); };
   },
   async bahan(box, re) {
-    box.innerHTML = `<div class="panel stack"><p class="muted small">HPP/satuan terisi otomatis dari pembelian (rata-rata). <b>Min</b> = batas stok menipis, <b>Par</b> = jumlah ideal setelah belanja (dipakai untuk saran order).</p>
+    box.innerHTML = `<div class="panel stack"><p class="muted small">HPP/satuan terisi otomatis dari pembelian (rata-rata). <b>Min</b> = batas stok menipis, <b>Par</b> = jumlah ideal setelah belanja/kiriman. Min dan Par berlaku untuk lokasi <b>${esc(curLoc()?.name || "")}</b>; ganti lokasi untuk mengatur lokasi lain.</p>
       <div class="tbl">${S.ing.length ? `<table><thead><tr><th>Bahan</th><th>Kategori</th><th>Satuan</th><th class="num">HPP/satuan</th><th class="num">Min</th><th class="num">Par</th><th>Supplier</th><th>Aktif</th><th></th></tr></thead><tbody>
         ${S.ing.map(i => `<tr><td><input data-f="name" data-id="${i.id}" value="${esc(i.name)}" style="min-width:140px"></td><td><input data-f="category" data-id="${i.id}" value="${esc(i.category || "Bahan")}" style="width:110px"></td><td><input data-f="unit" data-id="${i.id}" value="${esc(i.unit)}" style="width:80px"></td>
           <td><input data-f="cost_per_unit" data-id="${i.id}" inputmode="decimal" value="${Number(i.cost_per_unit)}" style="width:100px;text-align:right"></td><td><input data-f="min_stock" data-id="${i.id}" inputmode="decimal" value="${Number(i.min_stock)}" style="width:90px;text-align:right"></td>
@@ -1202,10 +1350,11 @@ const SET = {
         <label style="flex:0 1 130px">HPP/satuan<input id="niH" inputmode="decimal" placeholder="15"></label><label style="flex:0 1 110px">Min<input id="niM" inputmode="decimal"></label><label style="flex:0 1 110px">Par<input id="niP" inputmode="decimal"></label><label style="flex:0 1 150px">Supplier<input id="niS"></label><button class="btn pri" id="niAdd">Tambah</button></div>
       <datalist id="cats">${["Bahan", "Topping", "Bumbu", "Kemasan", "Gas & lainnya"].map(c => `<option value="${c}">`).join("")}</datalist></div>`;
     $$("[data-is]").forEach(b => b.onclick = () => { const id = b.dataset.is, g = f => $(`[data-f="${f}"][data-id="${id}"]`);
-      busy(b, async () => { await q(SB.from("ingredients").update({name: g("name").value.trim(), category: g("category").value.trim() || "Bahan", unit: g("unit").value.trim(), cost_per_unit: pd(g("cost_per_unit").value), min_stock: pd(g("min_stock").value), par_stock: pd(g("par_stock").value), supplier: g("supplier").value.trim() || null, active: g("active").checked}).eq("id", +id)); toast("Bahan disimpan."); re(); }); });
+      busy(b, async () => { await q(SB.from("ingredients").update({name: g("name").value.trim(), category: g("category").value.trim() || "Bahan", unit: g("unit").value.trim(), cost_per_unit: pd(g("cost_per_unit").value), supplier: g("supplier").value.trim() || null, active: g("active").checked}).eq("id", +id)); await rpc("stok_minpar", {p_ing: +id, p_loc: S.loc, p_min: pd(g("min_stock").value), p_par: pd(g("par_stock").value)}); toast("Bahan disimpan."); re(); }); });
     $("#niAdd").onclick = e => { const n = $("#niN").value.trim(), u = $("#niU").value.trim(); if (!n || !u) return toast("Isi nama dan satuan bahan.", true);
-      busy(e.target, async () => { const {error} = await SB.from("ingredients").insert({name: n, unit: u, category: $("#niC").value.trim() || "Bahan", cost_per_unit: pd($("#niH").value), min_stock: pd($("#niM").value), par_stock: pd($("#niP").value), supplier: $("#niS").value.trim() || null});
-        if (error) throw new Error(error.code === "23505" ? "Bahan dengan nama itu sudah ada." : error.message); toast("Bahan ditambahkan."); re(); }); };
+      busy(e.target, async () => { const {data: row, error} = await SB.from("ingredients").insert({name: n, unit: u, category: $("#niC").value.trim() || "Bahan", cost_per_unit: pd($("#niH").value), supplier: $("#niS").value.trim() || null}).select("id").single();
+        if (error) throw new Error(error.code === "23505" ? "Bahan dengan nama itu sudah ada." : error.message);
+        if (pd($("#niM").value) || pd($("#niP").value)) await rpc("stok_minpar", {p_ing: row.id, p_loc: S.loc, p_min: pd($("#niM").value), p_par: pd($("#niP").value)}); toast("Bahan ditambahkan."); re(); }); };
   },
   async resep(box, re) {
     const RM = S.menu.filter(m => m.category !== "Arsip"); const mid = +(S.ui.recipeMenu || RM[0]?.id);
@@ -1230,22 +1379,23 @@ const SET = {
   async staf(box, re) {
     const list = await q(SB.from("profiles").select("*").order("created_at"));
     box.innerHTML = `<div class="panel stack"><div class="head"><h3 style="margin:0">Staf</h3><button class="btn pri fit" id="sfNew">Tambah staf</button></div>
-      <div class="tbl"><table><thead><tr><th>Nama</th><th>Username</th><th>Peran</th><th>Status</th><th></th></tr></thead><tbody>
-      ${list.map(u => `<tr><td><b>${esc(u.full_name)}</b></td><td>${esc(u.username || "")}</td><td>${esc(ROLE_LABEL[u.staff_role] || u.staff_role)}</td><td><span class="pill ${u.active ? "ok" : "idle"}">${u.active ? "Aktif" : "Nonaktif"}</span></td><td class="num"><button class="btn ghost sm" data-sf="${u.id}">Ubah</button></td></tr>`).join("")}</tbody></table></div>
+      <div class="tbl"><table><thead><tr><th>Nama</th><th>Username</th><th>Peran</th><th>Lokasi</th><th>Status</th><th></th></tr></thead><tbody>
+      ${list.map(u => `<tr><td><b>${esc(u.full_name)}</b></td><td>${esc(u.username || "")}</td><td>${esc(ROLE_LABEL[u.staff_role] || u.staff_role)}</td><td>${esc(locName(u.location_id))}</td><td><span class="pill ${u.active ? "ok" : "idle"}">${u.active ? "Aktif" : "Nonaktif"}</span></td><td class="num"><button class="btn ghost sm" data-sf="${u.id}">Ubah</button></td></tr>`).join("")}</tbody></table></div>
       <div class="panel" style="background:var(--paper)"><b>Akses per peran</b><ul class="small muted" style="margin:.4rem 0 0;padding-left:1.1rem;display:grid;gap:.2rem">
         <li><b>Owner / Manager</b>: semua menu, termasuk keuangan, analitik, pengaturan, opname, dan pembatalan transaksi.</li>
-        <li><b>Kasir</b>: kasir, prep, closing kas & checklist, absensi, stok, order bahan.</li>
+        <li><b>Kasir</b>: kasir, prep, closing kas & checklist, absensi, stok, order bahan, terima kiriman, hanya di lokasi kerjanya.</li>
         <li><b>Dapur</b>: prep, checklist, absensi, stok & waste, order dan pembelian bahan.</li></ul></div></div>`;
     const form = u => { const m = modal(`<h3>${u ? "Ubah staf" : "Tambah staf"}</h3>
       <label>Nama<input id="sN" value="${esc(u?.full_name || "")}" maxlength="40"></label>
       <label>Username<input id="sU" value="${esc(u?.username || "")}" autocapitalize="none" placeholder="huruf kecil, mis. rina"></label>
       <label>Peran<select id="sR">${["kasir", "dapur", "manager", "owner"].filter(r => r !== "owner" || S.role === "owner").map(r => `<option value="${r}" ${u?.staff_role === r ? "selected" : ""}>${ROLE_LABEL[r]}</option>`).join("")}</select></label>
+      <label>Lokasi kerja<select id="sL">${S.locs.filter(l => l.active).map(l => `<option value="${l.id}" ${(u ? u.location_id : S.loc) === l.id ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</select></label>
       <label>${u ? "PIN baru (kosongkan bila tidak diganti)" : "PIN 6 angka"}<input id="sP" class="pin" inputmode="numeric" maxlength="6" autocomplete="off"></label>
       ${u ? `<label style="display:flex;gap:.5rem;align-items:center;color:var(--text)"><input type="checkbox" id="sA" ${u.active ? "checked" : ""} style="width:auto"> Akun aktif</label>` : ""}
       <div class="row" style="justify-content:flex-end"><button class="btn ghost fit" id="sNo">Batal</button><button class="btn pri fit" id="sOk">Simpan</button></div>`);
       m.querySelector("#sNo").onclick = closeModal;
       m.querySelector("#sOk").onclick = e => busy(e.target, async () => { const pin = m.querySelector("#sP").value.trim();
-        await callFn("admin-staff", {action: "save", id: u?.id || "", name: m.querySelector("#sN").value.trim(), username: m.querySelector("#sU").value.trim().toLowerCase(), role: m.querySelector("#sR").value, pin, active: u ? m.querySelector("#sA").checked : true});
+        await callFn("admin-staff", {action: "save", id: u?.id || "", name: m.querySelector("#sN").value.trim(), username: m.querySelector("#sU").value.trim().toLowerCase(), role: m.querySelector("#sR").value, location_id: +m.querySelector("#sL").value, pin, active: u ? m.querySelector("#sA").checked : true});
         closeModal(); toast("Data staf tersimpan." + (pin ? " Beri tahu PIN-nya langsung ke staf." : "")); await loadStaff(); re(); }); };
     $("#sfNew").onclick = () => form(null);
     $$("[data-sf]").forEach(b => b.onclick = () => form(list.find(u => u.id === b.dataset.sf)));
@@ -1262,7 +1412,7 @@ const SET = {
   }
 };
 
-const RENDER = {beranda: vBeranda, kasir: vKasir, prep: vPrep, closing: vClosing, absensi: vAbsensi, stok: vStok, order: vOrder, pembelian: vPembelian, laporan: vLaporan, analitik: vAnalitik, pengaturan: vPengaturan};
+const RENDER = {beranda: vBeranda, kasir: vKasir, prep: vPrep, closing: vClosing, absensi: vAbsensi, stok: vStok, order: vOrder, pembelian: vPembelian, kirim: vKirim, laporan: vLaporan, analitik: vAnalitik, pengaturan: vPengaturan};
 
 /* ---------- boot ---------- */
 async function boot() {
@@ -1273,7 +1423,7 @@ async function boot() {
 }
 boot();
 
-const BUILD = "20261017015943";
+const BUILD = "20261022011059";
 async function checkUpdate() { try { const t = await (await fetch(location.pathname + "?u=" + Date.now(), {cache: "no-store"})).text(); if (t.includes('const BUILD = "') && !t.includes('const BUILD = "' + BUILD + '"')) showUpdate(); } catch (e) {} }
 function showUpdate() { if ($("#upd")) return; const d = document.createElement("div"); d.id = "upd"; d.className = "upd"; d.setAttribute("role", "status"); d.innerHTML = '<span>Versi baru BST OS tersedia</span><button class="btn sm">Muat ulang</button>'; d.querySelector("button").onclick = () => location.reload(); document.body.appendChild(d); }
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkUpdate(); });
